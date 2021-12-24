@@ -1,0 +1,157 @@
+********************************************************************************
+
+                How to Compile and Execute parallel
+                            tqcorr.exe
+                    in MRCISD(TQ) calculations
+
+                    Run Li           July 19, 2017
+
+********************************************************************************
+
+
+
+----------------------To Compile------------------------------------------------
+0.  Assuming you need to install tqcorr in $UNDMOLDIR, set the environment variables
+    $UNDMOLDIR and $UNDSCR
+1.  Make sure MPI is installed on the computer. If installing on Hodor, load the desired
+    mpi module such as openmpi/mlnx/gcc/64/1.10.3rc4 by running
+    "module add openmpi/mlnx/gcc/64/1.10.3rc4"
+    All availble modules can be viewed by running "module avail"
+    It's a good idea to add the "module load" command into your .bash_profile or .bashrc
+    file
+2.  Make sure the mpisopen.exe file exist in /$UNDMOLDIR/source/libundmolmpi/
+3.  Make sure the compiler for libundmolmpi is mpicc by changing the $UNDCC flag in the make 
+    file into mpicc
+4.  Make sure /$UNDMOLDIR/include/libundmolmpi.h exists, and contains the line
+    FILE *mpisopen(const char *filename, const char *mode, FILE *infofile, int rank);
+5.  Compile the library files in libundmolmpi by running "make" in 
+    /$UNDMOLDIR/source/libundmolmpi/
+6.  Make sure directory /$UNDMOLDIR/source/tqcorr_parallel/ contains all following files:
+      cfgci_tq.dyn.c
+      cfgci_tq.h  
+      choleski.c  
+      main.c  
+      Makefile
+      readme
+7.  Make sure the compiler for tqcorr is mpicc by changing the $UNDCC flag
+    in the make file into mpicc
+8.  Compile the tqcorr_parallal program by running "make" in /$UNDMOLDIR/source/tqcorr_parallel
+9.  Check a new version of tqcorr_parallel.exe is generated in /$UNDMOLDIR/bin/
+-----------------------------------------------------------------------------------
+
+
+
+--------------------To Run a complete MRCISD(TQ) calculation-----------------------
+
+-------On a work station--------
+0.  Make sure the environment variables $UNDMOLDIR and $UNDSCR are set up correctly
+1.  Generate an input file with keyword MPI=1 in #ENERGY, SAVESCR=1 in #UNDMOL. See example in  
+    $UNDMOL/examples/exam01.ENERGY/tq_parallel.inp
+2.  Start the calculation by running "$UNDMOLDIR/bin/undmol.exe tq_parallel.inp" in the
+    work directory. This will execute the serial parts of MRCISD(TQ), including the entire
+    MRCISD calculation and the generation of TQ vector space and macroconfigurations. This
+    process will end with the message 
+    "The serial part of MRCISD(TQ) calculation terminated correcctly"
+3.  Do not delete any scratch files related to this calculation, do not change undmol.dat 
+4.  Excute the parallel tqcorr program by running in the work directory
+    "mpirun -n <number_of_cores> $UNDMOLDIR/bin/tqcorr_parallel.exe"
+5.  Any post processing programmes can be run manually if no scartch files are deleted
+----------------------------------
+ 
+------On Hodor or multi-node machines--------
+0.  Set up the environment variables $UNDMOLDIR and $UNDSCR on the calculation node. This is 
+    done by exporting them in the job file (pbs or slurm file)
+1.  Generate an input file with keyword MPI=1 in #ENERGY, SAVESCR=1 in #UNDMOL. See example in
+    $UNDMOL/examples/exam01.ENERGY/tq_parallel.inp
+2.  Start the calculation by running "$UNDMOLDIR/bin/undmol.exe tq_parallel.inp" in scheduler. Make 
+    sure scratch files can be accessed after this caculation terminates. This can be done by
+    (a) (recommanded, not supported on Hodor) set up the $UNDSCR to the central scratch of the 
+        supercomputer, such that all nodes can access all files with fast speed
+    (b) (easiest) set up the $UNDSCR to somewhere in your home directory
+    (c) (second easiest) copy the scratch files to your home directory by adding to the job file
+        "cp -r $UNDSCR/ $HOME/$where_you_save_the_scratch". Note this copied all files in $UNDSCR
+        on that node, it may include previous calculations.
+    (d) (recommended due to I/O speed and scartch file take too much space, but will require some
+        debugging on Hodor due to system stability) find out which nodes were used in the 
+        calculation, either by 
+        i)  requesting the calculation to be submitted to a particular node, or 
+        ii) add a line to the script such that this information is printed aut, e.g., in SLURM,
+            add "srun -n $SLURM_NTASKS hostname -s | sort -u > $SLURM_JOB_ID.hosts" before 
+            running the calculation.
+    This step executes the serial parts of MRCISD(TQ), including the entire MRCISD calculation
+    and the generation of TQ vector space and macroconfigurations. This process will end with
+    the message
+    "The serial part of MRCISD(TQ) calculation terminated correcctly"
+3.  Do not delete any scratch files related to this calculation, do not change undmol.dat
+4.  In the job file (.pbs or slurm file), load the same mpi module that you used for compiling 
+5.  Copy your scratch files to the scartch space that your parallel calculation can read. If 
+    the parallel calculation is performed on the same node as the serial part in step 2, skip
+    this step entirely, otherwise, skip the following only for the node that step 2 was 
+    calculated on. 
+    Based on your selection for step 2, how you achieve this varies. If you choose in step 2:
+    2.(a or b) skip this step entirely
+    2.(c or d) copy the scratch files to the nodes that you run parallel calculations on.
+          *If you can request which nodes to run the parallel calculation, and have ssh access
+          to the nodes, you can ssh into the each node and run "mkdir xxxxxx" to generate the
+          scartch directory, making sure the name of the scartch directory is the same as the
+          one generated in step 2, then copy the scratch files there using "cp" or "scp". As of
+          July 2017, Hodor does not support this function. If your supercomputer uses PBS 
+          scheduler, this can be done.
+            e.g., step 2 is done on node000, the parellalization is done on node001 and node002
+                  in addition to node000:
+                  ssh node001
+                  cd $UNDSCR (environmental variable may not work, replace with actual path)
+                  mkdir xxxxxxx (replace x's with your scartch directory name from step 2)
+                  scp -r node000:$UNDSCR/xxxxxx/ $UNDSCR
+                  (or cp -r $HOME/$where_you_saved_the_scratch $UNDSCR)
+                  exit
+                  ssh node002
+                  cd $UNDSCR (environmental variable may not work, replace with actual path)
+                  mkdir xxxxxxx (replace x's with your scartch directory name from step 2)
+                  scp -r node000:$UNDSCR/xxxxxx/ $UNDSCR
+                  (or cp -r $HOME/$where_you_saved_the_scratch $UNDSCR)
+                  exit
+         *If you can't ssh to the nodes, or can't request node for the following parallel 
+         calculation, you must copy the scratch files to your parallel nodes in the job
+         file before running the rest of the calculation. This can be done by adding the
+         lines "srun mkdir $UNDSCR" and "srun cp $HOME/$where_you_saved_the_scratch $UNDSCR"
+         (As of July 2017, the slurm scheduler on Hodor is able to recognize this command, but
+         this is not the best way to copy files because this copies the file num_of_cores times,
+         not num_of_nodes times. If Slurm is updated, it may be able to recognize the better 
+         copying command 
+         "srun -n $SLURM_NNODES -N $SLURM_NNODES cp -r $HOME/$where_you_saved_the_scratch $UNDSCR"
+         A helpful reference is http://lunarc-documentation.readthedocs.io/en/latest/batch_system/,
+         please seasrch for "MPI job using the node local discs" on the page)
+6   Excute the parallel tqcorr program by running in the job file
+    "mpirun -n <number_of_cores> $UNDMOLDIR/bin/tqcorr.exe"
+7.  Any post processing programmes can be run manually if no scartch files are deleted
+8.  Clean up your scratch space, especialy if they are under your home directory
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
